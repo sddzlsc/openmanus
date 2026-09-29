@@ -119,6 +119,8 @@ export interface ContainerInstance {
   externalId: string
   state: ContainerState
   endpoint: string | null
+  /** Bearer token for the runtime agent; persisted so long-lived runtimes survive a control-plane restart. */
+  runtimeToken: string | null
   previewPort: number | null
   startedAt: string
   lastActivityAt: string

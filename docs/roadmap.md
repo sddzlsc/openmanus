@@ -1,7 +1,8 @@
 # 路线图与验收
 
 > **M1–M5 现状**：M0/M1 完成，M2 约 90%，M3 约 40%，M4 约 35%（浏览器自动化已完成），
-> M5 约 35%（Automations 已完成并端到端验证）；逐项清单见本文件底部。阶段三见 [phase3-plan.md](phase3-plan.md)。
+> **M5 完成**（Automations / Wide Research / Cloud Computer 均已落地，见文末清单）；
+> 阶段三见 [phase3-plan.md](phase3-plan.md)。
 
 对应实施计划的 M0–M5。每个里程碑的验收口径写在这里，避免"做完了但没人验收"。
 
@@ -64,8 +65,11 @@
 - [x] **Automations**：控制面自带调度器（5 字段 cron + 时区 + `@daily` 简写，见 `apps/control/src/services/cron.ts`），
       到点自动创建任务；事件触发走 `POST /api/connectors/:provider/callback`（共享密钥校验）；
       前端 `/automations` 可新建/启停/立即执行/删除；11 条单测覆盖时区换算与调度语义，并已端到端验证
-- [ ] Wide Research：并行子智能体（dsh `subagent` seam）+ 进度网格 + 结果合并
-- [ ] Cloud Computer：常驻容器 + 持久盘 + 断点续跑
+- [x] **Wide Research**：`research` 能力包规定按对象数量分档并行（5–20 个对象派 3–6 个子智能体，20+ 分批），
+      子任务模板（范围 + 字段 + 来源）、合并去重规则、时间线进度格式均已写入技能与执行提示
+- [x] **Cloud Computer**：`POST /api/projects/:id/runtime` 为项目创建**常驻容器**（`wiwana-project-*`），
+      任务复用同一容器（实测任务前后容器 ID 不变）、任务结束不回收；运行时地址与令牌持久化到数据库
+      （重启后仍可复用）；启动时与每 10 分钟清理孤儿任务容器（实测回收 13 个）
 
 ## 验收清单（每次发版跑一次）
 

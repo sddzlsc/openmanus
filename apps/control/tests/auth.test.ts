@@ -18,7 +18,16 @@ async function harness(authMode: 'local' | 'phone') {
   const runtime = new MockRuntimeProvider({ workspaceRoot: config.workspaceRoot, durationMs: 200 })
   const runner = new TaskRunner({ store, runtime, quota, bus, config })
   const scheduler = new AutomationScheduler({ store, config, enqueue: (id) => runner.enqueue(id) })
-  const app = await buildServer({ store, config, runner, quota, bus, otpSender: new ConsoleOtpSender(), scheduler })
+  const app = await buildServer({
+    store,
+    config,
+    runner,
+    quota,
+    bus,
+    otpSender: new ConsoleOtpSender(),
+    scheduler,
+    runtimeProvider: runtime,
+  })
   return { app, store, runtime }
 }
 

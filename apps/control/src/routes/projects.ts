@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { newId } from '../lib/ids.js'
-import { NotFoundError } from '../lib/errors.js'
+import { AppError, NotFoundError } from '../lib/errors.js'
 import { requireAuth, type RouteDeps } from '../routeDeps.js'
 import { sendWorkspaceZip } from './tasks.js'
 
@@ -64,5 +64,46 @@ export async function registerProjectRoutes(app: FastifyInstance, deps: RouteDep
     const project = await deps.store.getProject(id)
     if (!project || project.userId !== auth.userId) throw new NotFoundError('项目不存在')
     return sendWorkspaceZip(reply, deps, project.workspaceKey, project.name)
+  })
+
+  /**
+   * Cloud computer: a project-owned runtime that stays up between tasks, so
+   * installed tools, background services and long-running work persist.
+   */
+  app.post('/api/projects/:id/runtime', async (request, reply) => {
+    const auth = await requireAuth(deps, request, reply)
+    if (!auth) return
+    const { id } = request.params as { id: string }
+    let project = await deps.store.getProject(id)
+    if (!project || project.userId !== auth.userId) throw new NotFoundError('项目不存在')
+    if (!deps.runtimeProvider.ensureProjectRuntime) {
+      throw new AppError('unsupported', '当前沙箱提供者不支持常驻环境（需要 SANDBOX_PROVIDER=docker）', 400)
+    }
+    if (project.environment !== 'cloud-computer') {
+      project = (await deps.store.touchProject(id, { environment: 'cloud-computer' })) ?? project
+    }
+    const runtime = await deps.runtimeProvider.ensureProjectRuntime(project)
+    await deps.store.upsertContainer(runtime)
+    return { runtime, project }
+  })
+
+  app.get('/api/projects/:id/runtime', async (request, reply) => {
+    const auth = await requireAuth(deps, request, reply)
+    if (!auth) return
+    const { id } = request.params as { id: string }
+    const project = await deps.store.getProject(id)
+    if (!project || project.userId !== auth.userId) throw new NotFoundError('项目不存在')
+    return { project, runtime: await deps.store.findRunningContainerForProject(id) }
+  })
+
+  app.delete('/api/projects/:id/runtime', async (request, reply) => {
+    const auth = await requireAuth(deps, request, reply)
+    if (!auth) return
+    const { id } = request.params as { id: string }
+    const project = await deps.store.getProject(id)
+    if (!project || project.userId !== auth.userId) throw new NotFoundError('项目不存在')
+    await deps.runtimeProvider.stopProjectRuntime?.(id)
+    await deps.store.touchProject(id, { environment: 'task-sandbox' })
+    return { ok: true }
   })
 }

@@ -18,6 +18,7 @@ async function main(): Promise<void> {
     config.store === 'postgres' && config.databaseUrl
       ? new PostgresStore(config.databaseUrl)
       : new MemoryStore()
+  if (store instanceof PostgresStore) await store.migrate()
 
   const runtime: RuntimeProvider =
     config.sandboxProvider === 'docker'
@@ -42,6 +43,12 @@ async function main(): Promise<void> {
             'MUSIC_API_KEY',
             'MUSIC_API_BASE',
           ],
+          // Cloud computers reuse the project's long-lived container instead of
+          // creating one per task; the control plane owns the rows.
+          findRuntime: (projectId) => store.findRunningContainerForProject(projectId),
+          saveRuntime: async (record) => {
+            await store.upsertContainer(record)
+          },
         })
       : new MockRuntimeProvider({
           workspaceRoot: config.workspaceRoot,
@@ -66,11 +73,29 @@ async function main(): Promise<void> {
   )
 
   const app = await buildServer(
-    { store, config, runner, quota, bus, otpSender: new ConsoleOtpSender(), scheduler },
+    { store, config, runner, quota, bus, otpSender: new ConsoleOtpSender(), scheduler, runtimeProvider: runtime },
     { logger: true },
   )
 
   await runner.recover()
+  if (runtime.reapIdle === undefined && 'reapOrphanContainers' in runtime) {
+    const reaper = runtime as unknown as {
+      reapOrphanContainers: (isActive: (taskId: string) => Promise<boolean>) => Promise<number>
+    }
+    const sweep = async () => {
+      try {
+        const removed = await reaper.reapOrphanContainers(async (taskId) => {
+          const task = await store.getTask(taskId)
+          return task?.status === 'running' || task?.status === 'queued'
+        })
+        if (removed > 0) console.log(`[control] reaped ${removed} orphan sandbox container(s)`)
+      } catch (error) {
+        console.warn('[control] orphan reap failed', error)
+      }
+    }
+    await sweep()
+    setInterval(() => void sweep(), 10 * 60_000).unref?.()
+  }
   scheduler.start()
   await app.listen({ port: config.port, host: config.host })
   console.log(`[control] listening on http://${config.host}:${config.port} (store=${config.store}, sandbox=${runtime.kind})`)

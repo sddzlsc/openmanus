@@ -14,9 +14,20 @@ async function main(): Promise<void> {
   const registry = new SessionRegistry()
 
   const dshAvailable = config.dsh.enabled && (await DshDriver.probe(config.dsh))
-  const driver: RuntimeDriver = dshAvailable ? new DshDriver(config.dsh) : new LocalDriver()
+  const driverKind: 'dsh' | 'local' = dshAvailable ? 'dsh' : 'local'
+  // One driver per session: a cloud computer serves many tasks in one container,
+  // and each task needs its own conversation history and cancellation scope.
+  const drivers = new Map<string, RuntimeDriver>()
+  const driverFor = (sessionId: string): RuntimeDriver => {
+    let existing = drivers.get(sessionId)
+    if (!existing) {
+      existing = dshAvailable ? new DshDriver(config.dsh) : new LocalDriver()
+      drivers.set(sessionId, existing)
+    }
+    return existing
+  }
   console.log(
-    `[runtime-agent] driver=${driver.kind} dsh=${dshAvailable ? 'available' : 'unavailable (local driver)'} ` +
+    `[runtime-agent] driver=${driverKind} dsh=${dshAvailable ? 'available' : 'unavailable (local driver)'} ` +
       `workspace=${config.workspace} capabilities=${config.capabilitiesRoot}`,
   )
 
@@ -34,7 +45,7 @@ async function main(): Promise<void> {
   app.get('/healthz', async (): Promise<RuntimeHealth> => ({
     ok: true,
     version: '0.1.0',
-    driver: driver.kind,
+    driver: driverKind,
     dsh: {
       available: dshAvailable,
       profile: dshAvailable ? config.dsh.profile : null,
@@ -57,7 +68,7 @@ async function main(): Promise<void> {
       capabilityPacks: body.capabilityPacks ?? config.task.capabilityPacks,
     })
     const context = makeContext(session)
-    void driver.start(context).catch((error) => {
+    void driverFor(session.id).start(context).catch((error) => {
       registry.emit(session, {
         type: 'error',
         message: error instanceof Error ? error.message : String(error),
@@ -71,14 +82,14 @@ async function main(): Promise<void> {
     const session = registry.get((request.params as { id: string }).id)
     if (!session) return reply.code(404).send({ error: { code: 'not_found', message: 'session 不存在' } })
     const body = (request.body ?? {}) as { text?: string }
-    await driver.send(makeContext(session), body.text ?? '')
+    await driverFor(session.id).send(makeContext(session), body.text ?? '')
     return { ok: true }
   })
 
   app.post('/v1/sessions/:id/cancel', async (request, reply) => {
     const session = registry.get((request.params as { id: string }).id)
     if (!session) return reply.code(404).send({ error: { code: 'not_found', message: 'session 不存在' } })
-    await driver.cancel(makeContext(session))
+    await driverFor(session.id).cancel(makeContext(session))
     return { ok: true }
   })
 

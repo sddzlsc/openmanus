@@ -43,6 +43,7 @@ async function buildHarness() {
     bus,
     otpSender: new ConsoleOtpSender(),
     scheduler,
+    runtimeProvider: runtime,
   })
   return { app, store, config, runner, runtime, quota, scheduler }
 }
@@ -225,5 +226,42 @@ describe('control plane', () => {
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     })
     expect(rescan.statusCode).toBe(200)
+  })
+
+  it('starts and stops a project cloud computer', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: '常驻项目' },
+    })
+    const projectId = (created.json() as { project: { id: string } }).project.id
+
+    const started = await app.inject({
+      method: 'POST',
+      url: `/api/projects/${projectId}/runtime`,
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(started.statusCode).toBe(200)
+    const body = started.json() as { runtime: { state: string; projectId: string }; project: { environment: string } }
+    expect(body.runtime.state).toBe('ready')
+    expect(body.project.environment).toBe('cloud-computer')
+
+    // The runtime row is persisted, so the status endpoint finds it.
+    const status = await app.inject({
+      method: 'GET',
+      url: `/api/projects/${projectId}/runtime`,
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect((status.json() as { runtime: { projectId: string } | null }).runtime?.projectId).toBe(projectId)
+
+    const stopped = await app.inject({
+      method: 'DELETE',
+      url: `/api/projects/${projectId}/runtime`,
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(stopped.statusCode).toBe(200)
+    const after = await harness.store.getProject(projectId)
+    expect(after?.environment).toBe('task-sandbox')
   })
 })

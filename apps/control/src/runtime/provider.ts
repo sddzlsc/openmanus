@@ -1,4 +1,4 @@
-import type { Project, RuntimeEvent, Task } from '@wiwana/protocol'
+import type { ContainerInstance, Project, RuntimeEvent, Task } from '@wiwana/protocol'
 
 export interface StartTaskInput {
   task: Task
@@ -11,6 +11,8 @@ export interface RuntimeHandle {
   readonly containerId: string | null
   readonly sessionId: string
   readonly previewPort: number | null
+  /** Long-lived project runtime (cloud computer): never disposed after a task. */
+  readonly persistent?: boolean
   send(text: string): Promise<void>
   cancel(): Promise<void>
   onEvent(listener: (event: RuntimeEvent) => void): () => void
@@ -20,6 +22,9 @@ export interface RuntimeHandle {
 export interface RuntimeProvider {
   readonly kind: 'mock' | 'docker'
   startTask(input: StartTaskInput): Promise<RuntimeHandle>
+  /** Cloud computer: start (or reuse) the project's always-on runtime. */
+  ensureProjectRuntime?(project: Project): Promise<ContainerInstance>
+  stopProjectRuntime?(projectId: string): Promise<void>
   /** Keep-alive bookkeeping; called on an interval by the control plane. */
   reapIdle?(): Promise<void>
   dispose(): Promise<void>

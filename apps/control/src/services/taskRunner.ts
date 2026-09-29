@@ -144,6 +144,7 @@ export class TaskRunner {
           externalId: handle.containerId,
           state: 'busy',
           endpoint: null,
+          runtimeToken: null,
           previewPort: handle.previewPort,
           startedAt: new Date().toISOString(),
           lastActivityAt: new Date().toISOString(),
@@ -166,7 +167,8 @@ export class TaskRunner {
       this.completions.delete(taskId)
       const handle = this.handles.get(taskId)
       this.handles.delete(taskId)
-      if (handle) await handle.dispose().catch(() => {})
+      // Cloud computers are a project's home: keep them running between tasks.
+      if (handle && !handle.persistent) await handle.dispose().catch(() => {})
     }
   }
 

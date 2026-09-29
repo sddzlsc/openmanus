@@ -166,6 +166,15 @@ export class DshDriver implements RuntimeDriver {
 /** Product framing: the headless agent must leave files, not only prose. */
 function buildPrompt(history: string[], type: string): string {
   const [first, ...followUps] = history
+  const researchHint =
+    type === 'research'
+      ? [
+          '',
+          '这是一个调研任务：对象超过 4 个时必须用 subagent 工具并行派发子智能体（每个 2–4 个对象，一批不超过 8 个），',
+          '子任务描述里写清「研究范围 + 需要的字段 + 必须附来源链接」；全部返回后按来源去重合并成对比表，',
+          '并在时间线里打印「派出子智能体：…」「子智能体完成：…（来源 N 条）」两行进度。',
+        ]
+      : []
   const lines = [
     '你是 Wiwana 智能体在沙箱中的执行单元。当前工作目录就是 /workspace，你的产出会被直接交付给用户。',
     `任务类型：${type}。`,
@@ -187,6 +196,7 @@ function buildPrompt(history: string[], type: string): string {
     '关键步骤要截图存到工作区（截图会被登记为交付物），不要在浏览器里做人工翻页拼接。',
     '',
     `用户任务：${first ?? ''}`,
+    ...researchHint,
   ]
   if (followUps.length > 0) {
     lines.push('', '后续补充要求（按时间顺序，优先级更高）：')

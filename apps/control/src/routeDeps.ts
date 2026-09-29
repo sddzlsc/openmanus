@@ -7,6 +7,7 @@ import type { TaskRunner } from './services/taskRunner.js'
 import type { QuotaService } from './services/quota.js'
 import type { TaskEventBus } from './services/bus.js'
 import type { AutomationScheduler } from './services/automationScheduler.js'
+import type { RuntimeProvider } from './runtime/provider.js'
 import { verifyToken } from './auth/tokens.js'
 
 export const AUTH_COOKIE = 'wiwana_token'
@@ -19,6 +20,7 @@ export interface RouteDeps {
   bus: TaskEventBus
   otpSender: OtpSender
   scheduler: AutomationScheduler
+  runtimeProvider: RuntimeProvider
 }
 
 export async function authenticate(

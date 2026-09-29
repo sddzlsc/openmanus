@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import type { RuntimeEvent } from '@wiwana/protocol'
+import type { ContainerInstance, Project, RuntimeEvent } from '@wiwana/protocol'
 import type { RuntimeHandle, RuntimeProvider, StartTaskInput } from './provider.js'
 
 /**
@@ -22,6 +22,32 @@ export class MockRuntimeProvider implements RuntimeProvider {
   }
 
   async dispose() {}
+
+  /**
+   * Development stand-in for a cloud computer: the API contract is real (a
+   * project-owned runtime row in `ready`), there is just no container behind it.
+   */
+  async ensureProjectRuntime(project: Project): Promise<ContainerInstance> {
+    const now = new Date().toISOString()
+    return {
+      id: `ctr_${project.id}_cloud`,
+      projectId: project.id,
+      taskId: null,
+      provider: 'mock',
+      externalId: `mock-cloud-${project.id}`,
+      state: 'ready',
+      endpoint: null,
+      runtimeToken: null,
+      previewPort: null,
+      startedAt: now,
+      lastActivityAt: now,
+      stoppedAt: null,
+    }
+  }
+
+  async stopProjectRuntime(): Promise<void> {
+    // nothing to tear down in mock mode
+  }
 }
 
 class MockHandle implements RuntimeHandle {

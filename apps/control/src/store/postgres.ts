@@ -28,6 +28,15 @@ export class PostgresStore implements Store {
     this.sql = postgres(databaseUrl, { max: 10, onnotice: () => {} })
   }
 
+  /**
+   * Idempotent schema migrations. `deploy/sql/001_init.sql` only runs when the
+   * database is first created, so every later column/add-on is applied here at
+   * boot — self-hosters never have to remember a manual migration step.
+   */
+  async migrate(): Promise<void> {
+    await this.sql`alter table containers add column if not exists runtime_token text`
+  }
+
   async createUser(input: { phone?: string | null; wechatOpenId?: string | null; displayName?: string }) {
     const rows = await this.sql<User[]>`
       insert into users (id, phone, wechat_open_id, display_name)
@@ -231,11 +240,12 @@ export class PostgresStore implements Store {
 
   async upsertContainer(input: ContainerInstance) {
     const rows = await this.sql<ContainerInstance[]>`
-      insert into containers (id, project_id, task_id, provider, external_id, state, endpoint, preview_port, started_at, last_activity_at, stopped_at)
+      insert into containers (id, project_id, task_id, provider, external_id, state, endpoint, runtime_token, preview_port, started_at, last_activity_at, stopped_at)
       values (${input.id}, ${input.projectId}, ${input.taskId}, ${input.provider}, ${input.externalId}, ${input.state},
-              ${input.endpoint}, ${input.previewPort}, ${input.startedAt}, ${input.lastActivityAt}, ${input.stoppedAt})
+              ${input.endpoint}, ${input.runtimeToken}, ${input.previewPort}, ${input.startedAt}, ${input.lastActivityAt}, ${input.stoppedAt})
       on conflict (id) do update set
-        state = excluded.state, endpoint = excluded.endpoint, preview_port = excluded.preview_port,
+        state = excluded.state, endpoint = excluded.endpoint, runtime_token = excluded.runtime_token,
+        preview_port = excluded.preview_port,
         last_activity_at = excluded.last_activity_at, stopped_at = excluded.stopped_at, task_id = excluded.task_id
       returning ${this.containerColumns}`
     return rows[0]!
@@ -435,7 +445,8 @@ export class PostgresStore implements Store {
   private get containerColumns() {
     return this.sql`
       id, project_id as "projectId", task_id as "taskId", provider, external_id as "externalId", state,
-      endpoint, preview_port as "previewPort", started_at as "startedAt", last_activity_at as "lastActivityAt",
+      endpoint, runtime_token as "runtimeToken", preview_port as "previewPort", started_at as "startedAt",
+      last_activity_at as "lastActivityAt",
       stopped_at as "stoppedAt"`
   }
 }

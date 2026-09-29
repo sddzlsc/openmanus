@@ -96,6 +96,7 @@ create table if not exists containers (
   external_id text not null,
   state text not null,
   endpoint text,
+  runtime_token text,
   preview_port integer,
   started_at timestamptz not null default now(),
   last_activity_at timestamptz not null default now(),
@@ -151,3 +152,6 @@ create table if not exists otps (
   code text not null,
   expires_at timestamptz not null
 );
+
+-- Existing databases: bring `containers` up to date with the cloud-computer columns.
+alter table containers add column if not exists runtime_token text;

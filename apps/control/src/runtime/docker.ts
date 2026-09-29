@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import Docker from 'dockerode'
-import type { RuntimeEvent } from '@wiwana/protocol'
+import type { ContainerInstance, Project, RuntimeEvent } from '@wiwana/protocol'
 import { RuntimeAgentClient } from './agentClient.js'
 import type { RuntimeHandle, RuntimeProvider, StartTaskInput } from './provider.js'
 
@@ -28,6 +28,12 @@ export interface DockerProviderOptions {
    * set. Only model/provider credentials belong here — never product secrets.
    */
   envPassthrough?: string[]
+  /**
+   * Persistence hooks for long-lived project runtimes (cloud computers). The
+   * control plane owns the rows; the provider only reads/writes them.
+   */
+  findRuntime?: (projectId: string) => Promise<ContainerInstance | null>
+  saveRuntime?: (runtime: ContainerInstance) => Promise<void>
 }
 
 /**
@@ -45,6 +51,26 @@ export class DockerRuntimeProvider implements RuntimeProvider {
   }
 
   async startTask(input: StartTaskInput): Promise<RuntimeHandle> {
+    const wantsPersistent = input.project.environment === 'cloud-computer'
+    if (wantsPersistent) {
+      const runtime = await this.ensureProjectRuntime(input.project)
+      const client = new RuntimeAgentClient(runtime.endpoint!, runtime.runtimeToken ?? '')
+      const session = await client.startSession({
+        taskId: input.task.id,
+        type: input.task.type,
+        prompt: input.task.prompt,
+        capabilityPacks: input.capabilityPacks,
+        limits: input.limits,
+      })
+      return new DockerRuntimeHandle({
+        container: null,
+        client,
+        sessionId: session.sessionId,
+        previewPort: runtime.previewPort,
+        persistent: true,
+      })
+    }
+
     const workspace = path.join(this.options.workspaceRoot, input.project.workspaceKey)
     await mkdir(workspace, { recursive: true })
     const token = `rt_${input.task.id}_${Math.random().toString(36).slice(2, 10)}`
@@ -59,9 +85,10 @@ export class DockerRuntimeProvider implements RuntimeProvider {
       [`traefik.http.services.${input.project.id}.loadbalancer.server.port`]: String(this.options.previewPort),
     }
 
+    const containerName = containerNameForTask(input.task.id)
     const container = await this.docker.createContainer({
       Image: this.options.image,
-      name: containerName(input.task.id),
+      name: containerName,
       Labels: labels,
       Env: [
         `WIWANA_RUNTIME_TOKEN=${token}`,
@@ -93,38 +120,172 @@ export class DockerRuntimeProvider implements RuntimeProvider {
       },
     })
 
+    // Anything that fails after the container exists must remove it again —
+    // otherwise a broken task leaves a container running for ever (observed in
+    // practice: dozens of orphans from failed tasks).
+    let session: Awaited<ReturnType<RuntimeAgentClient['startSession']>>
+    let previewPort: number | null = null
+    let endpoint: string
+    try {
+      await container.start()
+      const inspect = await container.inspect()
+      const agentBinding = inspect.NetworkSettings.Ports[`${this.options.agentPort}/tcp`]?.[0]
+      const previewBinding = inspect.NetworkSettings.Ports[`${this.options.previewPort}/tcp`]?.[0]
+      if (!agentBinding?.HostPort) throw new Error('sandbox container did not publish the runtime agent port')
+      previewPort = previewBinding?.HostPort ? Number(previewBinding.HostPort) : null
+      endpoint =
+        (this.options.connectMode ?? 'host-port') === 'container-dns'
+          ? `http://${containerNameForTask(input.task.id)}:${this.options.agentPort}`
+          : `http://127.0.0.1:${agentBinding.HostPort}`
+      const client = new RuntimeAgentClient(endpoint, token)
+      await waitForHealth(client, 60_000)
+      session = await client.startSession({
+        taskId: input.task.id,
+        type: input.task.type,
+        prompt: input.task.prompt,
+        capabilityPacks: input.capabilityPacks,
+        limits: input.limits,
+      })
+    } catch (error) {
+      await container.stop({ t: 2 }).catch(() => {})
+      await container.remove({ force: true }).catch(() => {})
+      throw error
+    }
+    const client = new RuntimeAgentClient(endpoint, token)
+
+    return new DockerRuntimeHandle({
+      container,
+      client,
+      sessionId: session.sessionId,
+      previewPort,
+      persistent: false,
+    })
+  }
+
+  /**
+   * Cloud computer: one container per project that survives between tasks, so
+   * installed tools, background services and long-running work stay put.
+   */
+  async ensureProjectRuntime(project: Project): Promise<ContainerInstance> {
+    const existing = await this.options.findRuntime?.(project.id)
+    if (existing?.endpoint && existing.state !== 'destroyed' && existing.state !== 'error') {
+      const client = new RuntimeAgentClient(existing.endpoint, existing.runtimeToken ?? '')
+      try {
+        const health = await client.health()
+        if (health.ok) return existing
+      } catch {
+        // fall through: recreate below
+      }
+    }
+
+    const workspace = path.join(this.options.workspaceRoot, project.workspaceKey)
+    await mkdir(workspace, { recursive: true })
+    const token = `rt_prj_${project.id}_${Math.random().toString(36).slice(2, 10)}`
+    const name = containerNameForProject(project.id)
+
+    await this.docker.getContainer(name).remove({ force: true }).catch(() => {})
+    const container = await this.docker.createContainer({
+      Image: this.options.image,
+      name,
+      Labels: {
+        'wiwana.role': 'cloud-computer',
+        'wiwana.project': project.id,
+        'traefik.enable': 'true',
+        [`traefik.http.routers.${project.id}.rule`]: `Host(\`s-${project.id}.${this.options.previewDomain}\`)`,
+        [`traefik.http.routers.${project.id}.entrypoints`]: 'websecure',
+        [`traefik.http.services.${project.id}.loadbalancer.server.port`]: String(this.options.previewPort),
+      },
+      Env: [
+        `WIWANA_RUNTIME_TOKEN=${token}`,
+        'WIWANA_TASK_TYPE=office',
+        'DSH_HOME=/home/agent/.dsh',
+        ...this.passthroughEnv(),
+      ],
+      WorkingDir: '/workspace',
+      ExposedPorts: {
+        [`${this.options.agentPort}/tcp`]: {},
+        [`${this.options.previewPort}/tcp`]: {},
+      },
+      HostConfig: {
+        Binds: [`${workspace}:/workspace`],
+        Memory: this.options.memoryMb * 1024 * 1024,
+        NanoCpus: Math.round(this.options.cpus * 1e9),
+        PidsLimit: 512,
+        CapDrop: ['ALL'],
+        SecurityOpt: ['no-new-privileges'],
+        NetworkMode: await this.resolveNetwork(),
+        PortBindings: {
+          [`${this.options.agentPort}/tcp`]: [{ HostIp: '127.0.0.1', HostPort: '' }],
+          [`${this.options.previewPort}/tcp`]: [{ HostIp: '127.0.0.1', HostPort: '' }],
+        },
+      },
+    })
     await container.start()
     const inspect = await container.inspect()
     const agentBinding = inspect.NetworkSettings.Ports[`${this.options.agentPort}/tcp`]?.[0]
     const previewBinding = inspect.NetworkSettings.Ports[`${this.options.previewPort}/tcp`]?.[0]
     if (!agentBinding?.HostPort) {
       await container.remove({ force: true }).catch(() => {})
-      throw new Error('sandbox container did not publish the runtime agent port')
+      throw new Error('cloud computer did not publish the runtime agent port')
     }
-
     const endpoint =
       (this.options.connectMode ?? 'host-port') === 'container-dns'
-        ? `http://${containerName(input.task.id)}:${this.options.agentPort}`
+        ? `http://${name}:${this.options.agentPort}`
         : `http://127.0.0.1:${agentBinding.HostPort}`
     const client = new RuntimeAgentClient(endpoint, token)
     await waitForHealth(client, 60_000)
-    const session = await client.startSession({
-      taskId: input.task.id,
-      type: input.task.type,
-      prompt: input.task.prompt,
-      capabilityPacks: input.capabilityPacks,
-      limits: input.limits,
-    })
 
-    return new DockerRuntimeHandle({
-      container,
-      client,
-      sessionId: session.sessionId,
+    const record: ContainerInstance = {
+      id: existing?.id ?? `ctr_${project.id}_cloud`,
+      projectId: project.id,
+      taskId: null,
+      provider: 'docker',
+      externalId: container.id,
+      state: 'ready',
+      endpoint,
+      runtimeToken: token,
       previewPort: previewBinding?.HostPort ? Number(previewBinding.HostPort) : null,
-    })
+      startedAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+      stoppedAt: null,
+    }
+    await this.options.saveRuntime?.(record)
+    return record
+  }
+
+  /** Stop and remove a project's always-on runtime. */
+  async stopProjectRuntime(projectId: string): Promise<void> {
+    const existing = await this.options.findRuntime?.(projectId)
+    if (!existing) return
+    await this.options.saveRuntime?.({ ...existing, state: 'destroyed', stoppedAt: new Date().toISOString() })
+    const container = this.docker.getContainer(existing.externalId)
+    await container.stop({ t: 5 }).catch(() => {})
+    await container.remove({ force: true }).catch(() => {})
   }
 
   async dispose() {}
+
+  /**
+   * Remove containers left behind by failed or interrupted tasks. Called on boot
+   * and periodically: a task container with no live task is garbage by definition.
+   */
+  async reapOrphanContainers(isTaskActive: (taskId: string) => Promise<boolean>): Promise<number> {
+    const containers = await this.docker.listContainers({
+      all: true,
+      filters: { label: ['wiwana.role=sandbox'] },
+    })
+    let removed = 0
+    for (const info of containers) {
+      const taskId = info.Labels?.['wiwana.task']
+      if (!taskId) continue
+      if (await isTaskActive(taskId)) continue
+      const container = this.docker.getContainer(info.Id)
+      await container.stop({ t: 2 }).catch(() => {})
+      await container.remove({ force: true }).catch(() => {})
+      removed += 1
+    }
+    return removed
+  }
 
   private passthroughEnv(): string[] {
     const names = this.options.envPassthrough ?? []
@@ -150,24 +311,28 @@ export class DockerRuntimeProvider implements RuntimeProvider {
 }
 
 class DockerRuntimeHandle implements RuntimeHandle {
-  readonly containerId: string
+  readonly containerId: string | null
   readonly sessionId: string
   readonly previewPort: number | null
+  readonly persistent: boolean
   private listeners = new Set<(event: RuntimeEvent) => void>()
   private abort = new AbortController()
   private disposed = false
 
   constructor(
     private readonly input: {
-      container: Docker.Container
+      container: Docker.Container | null
       client: RuntimeAgentClient
       sessionId: string
       previewPort: number | null
+      persistent: boolean
     },
   ) {
-    this.containerId = input.container.id
+    this.containerId = input.container?.id ?? null
     this.sessionId = input.sessionId
     this.previewPort = input.previewPort
+    this.persistent = input.persistent
+
     void this.pump()
   }
 
@@ -189,6 +354,7 @@ class DockerRuntimeHandle implements RuntimeHandle {
     this.disposed = true
     this.abort.abort()
     this.listeners.clear()
+    if (this.persistent || !this.input.container) return
     await this.input.container.stop({ t: 5 }).catch(() => {})
     await this.input.container.remove({ force: true }).catch(() => {})
   }
@@ -208,6 +374,14 @@ class DockerRuntimeHandle implements RuntimeHandle {
   }
 }
 
+function containerNameForTask(taskId: string): string {
+  return `wiwana-task-${taskId}`
+}
+
+function containerNameForProject(projectId: string): string {
+  return `wiwana-project-${projectId}`
+}
+
 async function waitForHealth(client: RuntimeAgentClient, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -220,9 +394,4 @@ async function waitForHealth(client: RuntimeAgentClient, timeoutMs: number): Pro
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
   throw new Error('sandbox runtime agent did not become healthy in time')
-}
-
-/** Sandbox container name; also the DNS name used in `container-dns` mode. */
-function containerName(taskId: string): string {
-  return `wiwana-task-${taskId}`
 }
