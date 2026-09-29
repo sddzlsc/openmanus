@@ -299,6 +299,7 @@ export class TaskRunner {
         title: `任务完成：${task.title}`,
         body: outcome.summary ?? '交付物已生成，可在任务详情中查看。',
       })
+      await this.promotePreviewEnvironment(task)
     } else if (outcome.status === 'failed') {
       await this.appendEvent(taskId, {
         type: 'error',
@@ -326,5 +327,37 @@ export class TaskRunner {
       at: new Date().toISOString(),
     } as TaskEvent)
     this.deps.bus.publish(taskId, stored)
+  }
+
+  /**
+   * A finished web/full-suite task leaves behind something to look at, but its
+   * task container is disposed right after the run — which would kill the
+   * preview (including the project's own API). Promote those projects to a cloud
+   * computer so the preview keeps working; the idle sweeper sleeps it later.
+   */
+  private async promotePreviewEnvironment(task: Task): Promise<void> {
+    if (!['web', 'fullstack'].includes(task.type)) return
+    const ensure = this.deps.runtime.ensureProjectRuntime?.bind(this.deps.runtime)
+    if (!ensure) return
+    const project = await this.deps.store.getProject(task.projectId)
+    if (!project) return
+    try {
+      const updated =
+        project.environment === 'cloud-computer'
+          ? project
+          : ((await this.deps.store.touchProject(project.id, { environment: 'cloud-computer' })) ?? project)
+      const runtime = await ensure(updated)
+      await this.deps.store.upsertContainer({ ...runtime, taskId: null, state: 'ready' })
+      await this.appendEvent(task.id, {
+        type: 'message',
+        role: 'system',
+        text: '已为该项目启动常驻预览环境：网站 / 、后台 /admin/ 、接口 /api/ 现在都可以访问；空闲后会自动休眠。',
+      })
+    } catch (error) {
+      this.deps.logger?.warn('preview promotion failed', {
+        taskId: task.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 }
