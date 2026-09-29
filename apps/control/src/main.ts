@@ -8,7 +8,6 @@ import { TaskRunner } from './services/taskRunner.js'
 import { MockRuntimeProvider } from './runtime/mock.js'
 import { DockerRuntimeProvider } from './runtime/docker.js'
 import type { RuntimeProvider } from './runtime/provider.js'
-import { ConsoleOtpSender } from './auth/otp.js'
 import { AutomationScheduler } from './services/automationScheduler.js'
 import type { Store } from './store/types.js'
 
@@ -73,7 +72,7 @@ async function main(): Promise<void> {
   )
 
   const app = await buildServer(
-    { store, config, runner, quota, bus, otpSender: new ConsoleOtpSender(), scheduler, runtimeProvider: runtime },
+    { store, config, runner, quota, bus, scheduler, runtimeProvider: runtime },
     { logger: true },
   )
 

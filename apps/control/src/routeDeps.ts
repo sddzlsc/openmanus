@@ -1,16 +1,16 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { AppConfig } from './config.js'
-import type { AuthContext } from './auth/tokens.js'
-import type { OtpSender } from './auth/otp.js'
 import type { Store } from './store/types.js'
 import type { TaskRunner } from './services/taskRunner.js'
 import type { QuotaService } from './services/quota.js'
 import type { TaskEventBus } from './services/bus.js'
 import type { AutomationScheduler } from './services/automationScheduler.js'
 import type { RuntimeProvider } from './runtime/provider.js'
-import { verifyToken } from './auth/tokens.js'
 
-export const AUTH_COOKIE = 'wiwana_token'
+export interface AuthContext {
+  userId: string
+  role: 'user' | 'admin'
+}
 
 export interface RouteDeps {
   store: Store
@@ -18,71 +18,52 @@ export interface RouteDeps {
   runner: TaskRunner
   quota: QuotaService
   bus: TaskEventBus
-  otpSender: OtpSender
   scheduler: AutomationScheduler
   runtimeProvider: RuntimeProvider
 }
 
-export async function authenticate(
-  deps: RouteDeps,
-  request: FastifyRequest,
-): Promise<AuthContext | null> {
-  // Login-free local mode: every request acts as the machine's owner, which is
-  // also the admin. Multi-user deployments set AUTH_MODE=phone.
-  if (deps.config.authMode === 'local') {
-    return { userId: await localUserId(deps), role: 'admin' }
-  }
-  const header = request.headers.authorization
-  const bearer = header?.startsWith('Bearer ') ? header.slice(7) : null
-  const cookie = (request.cookies as Record<string, string | undefined> | undefined)?.[AUTH_COOKIE] ?? null
-  const token = bearer ?? cookie
-  if (!token) return null
-  return verifyToken(deps.config.jwtSecret, token)
-}
+/**
+ * This build has **no accounts**: it is a single-operator, self-hosted tool
+ * (see README). Every request acts as the machine's owner, which is what makes
+ * a login-free local product possible. The owner row exists so tasks, projects
+ * and deliverables keep a stable owner id.
+ */
+let cachedOwnerId: string | null = null
 
-let cachedLocalUserId: string | null = null
-
-/** The single owner of a self-hosted instance, created on first use. */
-async function localUserId(deps: RouteDeps): Promise<string> {
-  if (cachedLocalUserId) {
-    const existing = await deps.store.getUser(cachedLocalUserId)
-    if (existing) return existing.id
+export async function currentOwner(deps: RouteDeps): Promise<AuthContext> {
+  if (cachedOwnerId) {
+    const existing = await deps.store.getUser(cachedOwnerId)
+    if (existing) return { userId: existing.id, role: 'admin' }
   }
   const users = await deps.store.listUsers()
   const owner = users.find((user) => user.role === 'admin') ?? users[0]
   if (owner) {
-    cachedLocalUserId = owner.id
-    return owner.id
+    cachedOwnerId = owner.id
+    return { userId: owner.id, role: 'admin' }
   }
   const created = await deps.store.createUser({ displayName: '本机用户' })
   await deps.store.setUserRole(created.id, 'admin')
-  cachedLocalUserId = created.id
-  return created.id
+  cachedOwnerId = created.id
+  return { userId: created.id, role: 'admin' }
+}
+
+/** Kept for call sites that still want the request object; accounts are gone. */
+export async function authenticate(deps: RouteDeps, _request: FastifyRequest): Promise<AuthContext> {
+  return currentOwner(deps)
 }
 
 export async function requireAuth(
   deps: RouteDeps,
   request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<AuthContext | null> {
-  const auth = await authenticate(deps, request)
-  if (!auth) {
-    await reply.code(401).send({ error: { code: 'unauthorized', message: '请先登录' } })
-    return null
-  }
-  return auth
+  _reply: FastifyReply,
+): Promise<AuthContext> {
+  return authenticate(deps, request)
 }
 
 export async function requireAdmin(
   deps: RouteDeps,
   request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<AuthContext | null> {
-  const auth = await requireAuth(deps, request, reply)
-  if (!auth) return null
-  if (auth.role !== 'admin') {
-    await reply.code(403).send({ error: { code: 'forbidden', message: '需要管理员权限' } })
-    return null
-  }
-  return auth
+  _reply: FastifyReply,
+): Promise<AuthContext> {
+  return authenticate(deps, request)
 }

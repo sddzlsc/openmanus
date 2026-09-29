@@ -1,10 +1,8 @@
-import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { ZodError } from 'zod'
 import { AppError } from './lib/errors.js'
 import type { RouteDeps } from './routeDeps.js'
-import { registerAuthRoutes } from './routes/auth.js'
 import { registerProjectRoutes } from './routes/projects.js'
 import { registerTaskRoutes } from './routes/tasks.js'
 import { registerArtifactRoutes } from './routes/artifacts.js'
@@ -13,7 +11,6 @@ import { registerMiscRoutes } from './routes/misc.js'
 export async function buildServer(deps: RouteDeps, options: { logger?: boolean } = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 64 * 1024 * 1024 })
 
-  await app.register(cookie)
   await app.register(cors, {
     origin: true,
     credentials: true,
@@ -44,7 +41,6 @@ export async function buildServer(deps: RouteDeps, options: { logger?: boolean }
     store: deps.config.store,
   }))
 
-  await registerAuthRoutes(app, deps)
   await registerProjectRoutes(app, deps)
   await registerTaskRoutes(app, deps)
   await registerArtifactRoutes(app, deps)

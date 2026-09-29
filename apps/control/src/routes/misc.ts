@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { newId } from '../lib/ids.js'
 import { NotFoundError, NotImplementedError } from '../lib/errors.js'
-import { requireAdmin, requireAuth, type RouteDeps } from '../routeDeps.js'
+import { currentOwner, requireAdmin, requireAuth, type RouteDeps } from '../routeDeps.js'
 import type { TaskTemplate } from '@wiwana/protocol'
 import { describeCron, initialNextRun } from '../services/automationScheduler.js'
 
@@ -92,6 +92,13 @@ export const TASK_TEMPLATES: TaskTemplate[] = [
 ]
 
 export async function registerMiscRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+  /** The single local operator; the UI shows this instead of an account page. */
+  app.get('/api/me', async () => {
+    const owner = await currentOwner(deps)
+    const user = await deps.store.getUser(owner.userId)
+    return { user }
+  })
+
   /**
    * Browser-side failures are otherwise invisible to the control plane (the
    * failing request never arrives). The web client posts them here so they show

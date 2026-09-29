@@ -33,6 +33,7 @@
       - /opt/wiwana/capabilities/media
       - /opt/wiwana/capabilities/research
       - /opt/wiwana/capabilities/browser
+      - /opt/wiwana/capabilities/vision
     watch: false
 
 # ── real coding executors, both backed by DeepSeek ────────────────────────────

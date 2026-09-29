@@ -12,7 +12,6 @@ export interface AppConfig {
   host: string
   store: 'memory' | 'postgres'
   databaseUrl: string | null
-  jwtSecret: string
   sandboxProvider: 'mock' | 'docker'
   workspaceRoot: string
   appDomain: string
@@ -29,13 +28,6 @@ export interface AppConfig {
     previewPort: number
     idleSleepMs: number
   }
-  devAllowFixedOtp: boolean
-  /**
-   * `local` (default) runs the platform as a single-user, login-free instance —
-   * the shape most people want when self-hosting. `phone` enables the SMS/OTP
-   * account system for multi-user deployments.
-   */
-  authMode: 'local' | 'phone'
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -49,7 +41,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     host: env.HOST ?? '127.0.0.1',
     store: env.STORE === 'postgres' ? 'postgres' : 'memory',
     databaseUrl: env.DATABASE_URL ?? null,
-    jwtSecret: env.JWT_SECRET ?? 'dev-secret-change-me',
     sandboxProvider: env.SANDBOX_PROVIDER === 'docker' ? 'docker' : 'mock',
     workspaceRoot: path.resolve(env.WORKSPACE_ROOT ?? './data/workspaces'),
     appDomain: env.APP_DOMAIN ?? 'app.wiwana.local',
@@ -70,7 +61,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       previewPort: num(env.SANDBOX_PREVIEW_PORT, 5173),
       idleSleepMs: num(env.SANDBOX_IDLE_SLEEP_MS, 15 * 60 * 1000),
     },
-    devAllowFixedOtp: env.DEV_FIXED_OTP !== 'false',
-    authMode: env.AUTH_MODE === 'phone' ? 'phone' : 'local',
   }
 }

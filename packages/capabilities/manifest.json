@@ -51,6 +51,13 @@
       "skills": ["browser"],
       "scripts": ["browser/scripts/browse.py"],
       "artifacts": ["image", "dataset", "doc"]
+    },
+    {
+      "id": "vision",
+      "taskTypes": ["web", "office", "media", "research"],
+      "skills": ["vision"],
+      "scripts": ["vision/scripts/describe_image.py"],
+      "artifacts": ["doc"]
     }
   ]
 }

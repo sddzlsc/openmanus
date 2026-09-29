@@ -52,7 +52,6 @@ export function reportClientError(error: unknown, where: string, detail?: unknow
 }
 
 export const api = {
-  me: () => request<{ user: User }>('/api/me'),
   templates: () => request<{ templates: TaskTemplate[] }>('/api/templates'),
   usage: () => request<{ usage: UsageSnapshot }>('/api/usage'),
   tasks: () => request<{ tasks: Task[] }>('/api/tasks'),
@@ -86,17 +85,6 @@ export const api = {
       body: JSON.stringify({ enabled }),
     }),
   notifications: () => request<{ notifications: Notification[] }>('/api/notifications'),
-  requestCode: (phone: string) =>
-    request<{ ok: boolean; devCode?: string }>('/api/auth/phone/request-code', {
-      method: 'POST',
-      body: JSON.stringify({ phone }),
-    }),
-  verifyCode: (phone: string, code: string) =>
-    request<{ user: User }>('/api/auth/phone/verify', {
-      method: 'POST',
-      body: JSON.stringify({ phone, code }),
-    }),
-  logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
 }
 
 /** Subscribe to a task event stream with automatic reconnect + replay. */

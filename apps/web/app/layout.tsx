@@ -27,8 +27,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/automations" className="hover:text-[var(--wiwana-ink)]">
                 自动化
               </Link>
-              <Link href="/login" className="hover:text-[var(--wiwana-ink)]">
-                账号
+              <Link href="/admin" className="hover:text-[var(--wiwana-ink)]">
+                管理
               </Link>
             </nav>
           </div>

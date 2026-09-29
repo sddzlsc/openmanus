@@ -10,9 +10,8 @@ import { MockRuntimeProvider } from '../src/runtime/mock.js'
 import { TaskEventBus } from '../src/services/bus.js'
 import { QuotaService } from '../src/services/quota.js'
 import { TaskRunner } from '../src/services/taskRunner.js'
-import { ConsoleOtpSender } from '../src/auth/otp.js'
-import { signToken } from '../src/auth/tokens.js'
 import { AutomationScheduler } from '../src/services/automationScheduler.js'
+import { currentOwner } from '../src/routeDeps.js'
 
 const workspaceRoot = mkdtempSync(path.join(tmpdir(), 'wiwana-test-'))
 
@@ -24,9 +23,6 @@ async function buildHarness() {
     MOCK_TASK_DURATION_MS: '400',
     QUOTA_MAX_RUNNING_TASKS: '1',
     JWT_SECRET: 'test-secret',
-    // These tests exercise the multi-user account path; local (login-free) mode
-    // is covered separately in auth.test.ts.
-    AUTH_MODE: 'phone',
   } as NodeJS.ProcessEnv)
 
   const store = new MemoryStore()
@@ -41,7 +37,6 @@ async function buildHarness() {
     runner,
     quota,
     bus,
-    otpSender: new ConsoleOtpSender(),
     scheduler,
     runtimeProvider: runtime,
   })
@@ -67,9 +62,18 @@ describe('control plane', () => {
   beforeAll(async () => {
     harness = await buildHarness()
     app = harness.app
-    const user = await harness.store.createUser({ phone: '13800000000' })
-    userId = user.id
-    token = await signToken('test-secret', { userId: user.id, role: 'user' })
+    // No accounts in this build: every request is the local owner.
+    const owner = await currentOwner({
+      store: harness.store,
+      config: harness.config,
+      runner: harness.runner,
+      quota: harness.quota,
+      bus: new TaskEventBus(),
+      scheduler: harness.scheduler,
+      runtimeProvider: harness.runtime,
+    })
+    userId = owner.userId
+    token = ''
   })
 
   afterAll(async () => {
@@ -122,8 +126,9 @@ describe('control plane', () => {
     const artifacts = (list.json() as { artifacts: Array<{ id: string; shareEnabled: boolean }> }).artifacts
     const artifact = artifacts[0]!
 
-    const blocked = await app.inject({ method: 'GET', url: `/files/${artifact.id}` })
-    expect(blocked.statusCode).toBe(401)
+    // No accounts in this build: the local owner can always read its own files.
+    const ownerRead = await app.inject({ method: 'GET', url: `/files/${artifact.id}` })
+    expect(ownerRead.statusCode).toBe(200)
 
     const shared = await app.inject({
       method: 'POST',
@@ -189,34 +194,9 @@ describe('control plane', () => {
     await store.setUserQuota(userId, null)
   })
 
-  it('validates phone login with the dev OTP', async () => {
-    const request = await app.inject({
-      method: 'POST',
-      url: '/api/auth/phone/request-code',
-      payload: { phone: '13900000000' },
-    })
-    expect(request.statusCode).toBe(200)
-    expect((request.json() as { devCode?: string }).devCode).toBe('000000')
-
-    const verify = await app.inject({
-      method: 'POST',
-      url: '/api/auth/phone/verify',
-      payload: { phone: '13900000000', code: '000000' },
-    })
-    expect(verify.statusCode).toBe(200)
-    expect((verify.json() as { user: { phone: string } }).user.phone).toBe('13900000000')
-  })
-
-  it('accepts body-less JSON POSTs (logout, cancel, rescan)', async () => {
+  it('accepts body-less JSON POSTs (rescan, cancel)', async () => {
     // Regression: a JSON content-type with an empty body used to 400, which made
     // "退出登录", "取消任务" and "刷新交付物" silently do nothing in the UI.
-    const logout = await app.inject({
-      method: 'POST',
-      url: '/api/auth/logout',
-      headers: { 'content-type': 'application/json' },
-    })
-    expect(logout.statusCode).toBe(200)
-
     const tasks = await harness.store.listTasks(userId)
     const finished = tasks.find((task) => task.status === 'done')
     expect(finished).toBeTruthy()
