@@ -1,0 +1,20 @@
+{
+  "name": "wiwana-agent-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:control": "pnpm --filter @wiwana/control dev",
+    "dev:web": "pnpm --filter @wiwana/web dev",
+    "dev:runtime": "pnpm --filter @wiwana/runtime-agent dev",
+    "dev:all": "pnpm -r --parallel --filter @wiwana/control --filter @wiwana/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "smoke": "node scripts/smoke.mjs"
+  }
+}

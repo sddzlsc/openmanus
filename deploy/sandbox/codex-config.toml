@@ -1,0 +1,21 @@
+# Codex CLI configuration for the Wiwana sandbox.
+#
+# Codex talks to DeepSeek through its OpenAI-compatible endpoint — no OpenAI
+# account is involved. The key comes from the subagent provider's `env` config
+# (the harness scrubs credential-shaped ambient variables before spawning).
+
+model = "deepseek-chat"
+model_provider = "deepseek"
+# The container IS the sandbox: Codex's own bwrap sandbox cannot create user
+# namespaces inside a Docker container and would fail every command with
+# "bwrap: No permissions to create a new namespace".
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+env_key = "DEEPSEEK_API_KEY"
+# DeepSeek serves the OpenAI Responses protocol at the same base URL, and modern
+# Codex builds only speak `responses` (chat-completions was removed).
+wire_api = "responses"

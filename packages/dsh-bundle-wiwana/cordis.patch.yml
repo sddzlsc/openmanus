@@ -1,0 +1,81 @@
+# Wiwana product bundle patch for DeepSeek Harness.
+#
+# Applied AFTER @deepseek-ai/dsh-base and @deepseek-ai/dsh-web-app. A patch row
+# replaces the targeted row's whole `config`, so every row below restates every
+# key it owns.
+#
+# Install (inside the sandbox image):
+#   dsh plugin --profile wiwana add /opt/wiwana/dsh-bundle
+#
+# This bundle is deliberately declarative: it changes product policy only
+# (persona + capability skills) and leaves the upstream plugin tree intact, so
+# `@deepseek-ai/dsh-*` stays upgradeable.
+
+- id: system-prompt
+  config:
+    persona: >-
+      你是 Wiwana 通用智能体，运行在云端沙箱中，通过网页与用户协作。当前模型是 {{model}}，工作目录是 {{cwd}}。
+      你的职责是把用户的一句话需求变成可以直接使用的交付物：文档、表格、幻灯片、PDF、数据图表、网页、图片、视频或音乐。
+      工作原则：先复述需求并列出交付物清单，再动手；一次只做一件事并保持产物可预览；所有数字与结论必须能追溯到文件或来源；
+      涉及生成图片、视频、音乐时先给出改写后的提示词再调用能力包；涉及真实人物、品牌商标、违法违规内容一律拒绝并说明原因。
+      交付前必须自检：文件是否真实生成、能否被常见软件打开、中文是否乱码、网页在手机宽度下是否横向滚动。
+      用中文与用户沟通，语气专业、简洁，不暴露内部工具名与插件细节；把过程写进时间线，把结论写进最终回复。
+      如果信息不足，优先给出一个可用的初版，并在回复末尾用最多三条列出需要用户确认的事项。
+
+- id: skill-filesystem
+  config:
+    providerName: filesystem
+    includeDefaultRoots: true
+    customSkillDirs:
+      - /opt/wiwana/capabilities/office
+      - /opt/wiwana/capabilities/data
+      - /opt/wiwana/capabilities/web
+      - /opt/wiwana/capabilities/media
+      - /opt/wiwana/capabilities/research
+      - /opt/wiwana/capabilities/browser
+    watch: false
+
+# ── real coding executors, both backed by DeepSeek ────────────────────────────
+# The base bundle ships the in-process subagents only. Codex and Claude Code are
+# wired in here so coding work can be delegated to the official CLIs running
+# inside this sandbox — and both are pointed at DeepSeek, so no OpenAI or
+# Anthropic account/network path is required:
+#   * Codex      → DeepSeek's OpenAI-compatible endpoint (see ~/.codex/config.toml)
+#   * Claude Code→ DeepSeek's Anthropic-compatible endpoint (ANTHROPIC_BASE_URL)
+# An absent key yields an empty string, surfacing as a clear tool error instead
+# of failing the whole profile at boot.
+- insert:
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+      config:
+        env:
+          DEEPSEEK_API_KEY: !!js process.env.DEEPSEEK_API_KEY ?? ''
+
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: codex
+        toolName: subagent_codex
+        enableRunInBackground: false
+        maxDepth: provider-managed
+
+    - id: subagent-claude-code
+      name: '@deepseek-ai/dsh-subagent-claude-code'
+      config:
+        env:
+          ANTHROPIC_BASE_URL: https://api.deepseek.com/anthropic
+          ANTHROPIC_AUTH_TOKEN: !!js process.env.DEEPSEEK_API_KEY ?? ''
+          ANTHROPIC_API_KEY: !!js process.env.DEEPSEEK_API_KEY ?? ''
+          ANTHROPIC_MODEL: deepseek-chat
+          ANTHROPIC_SMALL_FAST_MODEL: deepseek-chat
+          # DeepSeek's window is 128k; without this Claude Code assumes 200k and
+          # warns on every start.
+          CLAUDE_CODE_MAX_CONTEXT_TOKENS: '131072'
+
+    - id: tool-subagent-claude-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        enableRunInBackground: false
+        maxDepth: provider-managed

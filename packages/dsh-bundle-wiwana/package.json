@@ -1,0 +1,22 @@
+{
+  "name": "@wiwana/dsh-bundle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Wiwana product bundle for DeepSeek Harness: product persona, capability skills, model policy and tool policy.",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "cordis.patch.yml",
+    "persona.md",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "echo \"declarative bundle\"",
+    "build": "echo \"declarative bundle\"",
+    "test": "echo \"validated by sandbox image build\""
+  }
+}

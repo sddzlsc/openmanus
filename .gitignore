@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.turbo/
+*.log
+.env
+.env.local
+data/
+workspaces/
+.DS_Store
+coverage/
+# 证书与 ACME 状态（含私钥，永不入库）
+deploy/traefik/certs/
+deploy/traefik/letsencrypt/

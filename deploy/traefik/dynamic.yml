@@ -1,0 +1,30 @@
+# 静态补充：任务容器的预览路由通过 docker label 动态注册（见
+# apps/control/src/runtime/docker.ts），这里只放与容器无关的固定项。
+http:
+  routers:
+    # 仅用于触发泛域名证书签发：noop 服务不会转发任何流量，
+    # 但 Traefik 会按 tls.domains 声明在启动时申请 wiwana.com 的
+    # apex + 通配符证书（DNS-01，无需公网入口）。
+    cert-bootstrap:
+      rule: Host(`wiwana.com`)
+      service: noop@internal
+      entryPoints: [websecure]
+      tls:
+        certResolver: alidns
+        domains:
+          - main: wiwana.com
+            sans:
+              - '*.wiwana.com'
+
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        contentTypeNosniff: true
+        customFrameOptionsValue: SAMEORIGIN
+        referrerPolicy: strict-origin-when-cross-origin
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12

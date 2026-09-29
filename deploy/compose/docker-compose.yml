@@ -1,0 +1,99 @@
+# Single-node deployment (阿里云 ECS 起步).
+#
+#   docker compose -f deploy/compose/docker-compose.yml --env-file .env up -d
+#
+# Networks: `edge` carries public traffic through Traefik; `sandbox` hosts task
+# containers and must not reach the metadata service (see deploy/README.md).
+
+services:
+  traefik:
+    image: traefik:v3.2
+    command:
+      - --configFile=/etc/traefik/traefik.yml
+      # Traefik 静态配置不解析 ${VAR}，邮箱只能在这里由 compose 插值传入
+      - --certificatesresolvers.alidns.acme.email=${ACME_EMAIL}
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      ALICLOUD_ACCESS_KEY: ${ALICLOUD_ACCESS_KEY:-}
+      ALICLOUD_SECRET_KEY: ${ALICLOUD_SECRET_KEY:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ../traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - traefik-certs:/letsencrypt
+    networks: [edge]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wiwana}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wiwana}
+      POSTGRES_DB: ${POSTGRES_DB:-wiwana}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../sql:/docker-entrypoint-initdb.d:ro
+    networks: [internal]
+    restart: unless-stopped
+
+  control:
+    image: wiwana/control:0.1.0
+    build:
+      context: ../..
+      dockerfile: deploy/control/Dockerfile
+    environment:
+      PORT: '8787'
+      HOST: 0.0.0.0
+      STORE: postgres
+      DATABASE_URL: postgres://${POSTGRES_USER:-wiwana}:${POSTGRES_PASSWORD:-wiwana}@postgres:5432/${POSTGRES_DB:-wiwana}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      SANDBOX_PROVIDER: docker
+      SANDBOX_IMAGE: wiwana/sandbox:0.1.0
+      SANDBOX_NETWORK: wiwana-sandbox
+      WORKSPACE_ROOT: /data/workspaces
+      PREVIEW_DOMAIN: ${PREVIEW_DOMAIN:-wiwana.example.com}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - workspaces:/data/workspaces
+    networks: [edge, internal, sandbox]
+    depends_on: [postgres]
+    restart: unless-stopped
+    labels:
+      traefik.enable: 'true'
+      traefik.http.routers.wiwana-api.rule: Host(`${API_DOMAIN:-api.wiwana.example.com}`)
+      traefik.http.routers.wiwana-api.entrypoints: websecure
+      traefik.http.routers.wiwana-api.tls.certresolver: alidns
+      traefik.http.services.wiwana-api.loadbalancer.server.port: '8787'
+
+  web:
+    image: wiwana/web:0.1.0
+    build:
+      context: ../..
+      dockerfile: deploy/web/Dockerfile
+    environment:
+      CONTROL_API_URL: http://control:8787
+      NEXT_PUBLIC_CONTROL_API_URL: https://${API_DOMAIN:-api.wiwana.example.com}
+    networks: [edge, internal]
+    depends_on: [control]
+    restart: unless-stopped
+    labels:
+      traefik.enable: 'true'
+      traefik.http.routers.wiwana-app.rule: Host(`${APP_DOMAIN:-app.wiwana.example.com}`)
+      traefik.http.routers.wiwana-app.entrypoints: websecure
+      traefik.http.routers.wiwana-app.tls.certresolver: alidns
+      traefik.http.services.wiwana-app.loadbalancer.server.port: '3000'
+
+volumes:
+  pgdata:
+  traefik-certs:
+  workspaces:
+
+networks:
+  edge:
+  internal:
+  sandbox:
+    name: wiwana-sandbox

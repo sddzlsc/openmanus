@@ -1,0 +1,14 @@
+{
+  "name": "wiwana-task-profile",
+  "private": true,
+  "type": "module",
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-headless",
+        "@wiwana/dsh-bundle"
+      ]
+    }
+  }
+}

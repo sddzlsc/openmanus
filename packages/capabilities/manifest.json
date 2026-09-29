@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "packs": [
+    {
+      "id": "office",
+      "taskTypes": ["office", "data", "research", "automation"],
+      "skills": ["office"],
+      "scripts": [
+        "office/scripts/make_docx.py",
+        "office/scripts/make_xlsx.py",
+        "office/scripts/make_pptx.py",
+        "office/scripts/make_pdf.py"
+      ],
+      "artifacts": ["doc", "sheet", "slides", "pdf"]
+    },
+    {
+      "id": "data",
+      "taskTypes": ["data", "office", "research"],
+      "skills": ["data"],
+      "scripts": ["data/scripts/chart.py"],
+      "artifacts": ["chart", "dataset"]
+    },
+    {
+      "id": "web",
+      "taskTypes": ["web"],
+      "skills": ["web"],
+      "scripts": [],
+      "artifacts": ["website", "code"]
+    },
+    {
+      "id": "media",
+      "taskTypes": ["media"],
+      "skills": ["media"],
+      "scripts": [
+        "media/scripts/generate_image.py",
+        "media/scripts/generate_video.py",
+        "media/scripts/generate_music.py"
+      ],
+      "artifacts": ["image", "video", "audio"]
+    },
+    {
+      "id": "research",
+      "taskTypes": ["research", "automation"],
+      "skills": ["research"],
+      "scripts": [],
+      "artifacts": ["doc"]
+    },
+    {
+      "id": "browser",
+      "taskTypes": ["research", "web", "automation"],
+      "skills": ["browser"],
+      "scripts": ["browser/scripts/browse.py"],
+      "artifacts": ["image", "dataset", "doc"]
+    }
+  ]
+}
