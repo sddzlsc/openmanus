@@ -8,6 +8,7 @@ import { DshDriver } from './drivers/dsh.js'
 import type { RuntimeDriver } from './drivers/types.js'
 import { startPreviewServer } from './preview.js'
 import { inferMime } from './drivers/artifacts.js'
+import { ScreenWatcher } from './screen.js'
 
 async function main(): Promise<void> {
   const config = loadRuntimeConfig()
@@ -68,6 +69,17 @@ async function main(): Promise<void> {
       capabilityPacks: body.capabilityPacks ?? config.task.capabilityPacks,
     })
     const context = makeContext(session)
+    const watcher = new ScreenWatcher(
+      {
+        scriptPath: process.env.WIWANA_SCREEN_SCRIPT ?? '/opt/wiwana/screen_capture.py',
+        previewUrl: `http://127.0.0.1:${config.previewPort}/index.html`,
+        intervalMs: Number(process.env.WIWANA_SCREEN_INTERVAL_MS ?? 20_000),
+        timeoutMs: Number(process.env.WIWANA_SCREEN_TIMEOUT_MS ?? 25_000),
+        shouldContinue: () => !session.finished && !session.cancelled,
+      },
+      (event) => registry.emit(session, event),
+    )
+    watcher.start()
     void driverFor(session.id).start(context).catch((error) => {
       registry.emit(session, {
         type: 'error',

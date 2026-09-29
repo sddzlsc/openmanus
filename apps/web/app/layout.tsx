@@ -3,8 +3,8 @@ import Link from 'next/link'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Wiwana 通用智能体',
-  description: '一句话交代任务，云端智能体异步执行，产出文档、表格、幻灯片、网页、图片与视频。',
+  title: 'OpenManus · 本地优先的通用智能体',
+  description: '一句话交代任务，智能体在本机沙箱里异步执行，产出文档、表格、幻灯片、网页、图片与视频。',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,8 +14,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="sticky top-0 z-30 border-b border-[var(--wiwana-line)] bg-white/80 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
             <Link href="/" className="flex items-center gap-2 font-semibold">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--wiwana-brand)] text-sm text-white">W</span>
-              Wiwana 智能体
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-[var(--wiwana-brand)] text-sm text-white">M</span>
+              OpenManus
             </Link>
             <nav className="flex items-center gap-4 text-sm text-[var(--wiwana-muted)]">
               <Link href="/" className="hover:text-[var(--wiwana-ink)]">

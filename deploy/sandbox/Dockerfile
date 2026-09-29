@@ -53,6 +53,7 @@ COPY deploy/sandbox/profile-task.package.json /tmp/wiwana-task-profile.package.j
 COPY deploy/sandbox/codex-config.toml /tmp/codex-config.toml
 COPY --from=build /src/apps/runtime-agent/dist /opt/wiwana/runtime-agent/dist
 COPY deploy/sandbox/entrypoint.sh /usr/local/bin/wiwana-entrypoint
+COPY deploy/sandbox/screen_capture.py /opt/wiwana/screen_capture.py
 RUN chmod +x /usr/local/bin/wiwana-entrypoint
 
 # The runtime agent's only runtime dependencies. They are installed here rather

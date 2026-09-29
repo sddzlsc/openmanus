@@ -76,6 +76,24 @@ export const api = {
     request<{ automation: Automation }>(`/api/automations/${id}`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
   deleteAutomation: (id: string) => request<{ ok: boolean }>(`/api/automations/${id}`, { method: 'DELETE' }),
   runAutomationNow: (id: string) => request<{ ok: boolean }>(`/api/automations/${id}/run-now`, { method: 'POST' }),
+  adminOverview: () =>
+    request<{ users: number; tasks: Record<string, number>; containers: Record<string, number> }>('/api/admin/overview'),
+  adminContainers: () =>
+    request<{
+      containers: Array<{
+        id: string
+        projectId: string
+        provider: string
+        state: string
+        previewPort: number | null
+        lastActivityAt: string
+      }>
+    }>('/api/admin/containers'),
+  adminTasks: () =>
+    request<{
+      tasks: Array<{ id: string; title: string; type: string; status: string; progress: number; projectId: string }>
+    }>('/api/admin/tasks'),
+  adminReap: () => request<{ removed: number }>('/api/admin/reap', { method: 'POST' }),
   artifacts: () => request<{ artifacts: Artifact[] }>('/api/artifacts'),
   artifact: (id: string) => request<{ artifact: Artifact }>(`/api/artifacts/${id}`),
   projects: () => request<{ projects: Project[] }>('/api/projects'),

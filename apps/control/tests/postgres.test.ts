@@ -45,6 +45,10 @@ describe.skipIf(!databaseUrl)('postgres store', () => {
         startedAt: null,
         finishedAt: null,
       })
+      // Timestamps must arrive as ISO strings: the API layer sorts and slices
+      // them as strings.
+      expect(typeof task.createdAt).toBe('string')
+      expect(task.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
       const stored = await store.appendTaskEvent(task.id, {
         type: 'status',
         seq: 0,

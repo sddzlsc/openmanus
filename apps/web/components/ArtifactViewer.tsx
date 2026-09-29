@@ -50,7 +50,7 @@ export function ArtifactViewer({ artifactId }: { artifactId: string }) {
         <div>
           <h1 className="text-lg font-semibold">{artifact.name}</h1>
           <p className="text-xs text-[var(--wiwana-muted)]">
-            {artifact.kind} · {formatSize(artifact.sizeBytes)} · 由 Wiwana 智能体生成
+            {artifact.kind} · {formatSize(artifact.sizeBytes)} · 由 OpenManus 生成
           </p>
         </div>
         <div className="flex gap-2">

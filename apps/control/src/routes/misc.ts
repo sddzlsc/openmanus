@@ -306,4 +306,55 @@ export async function registerMiscRoutes(app: FastifyInstance, deps: RouteDeps):
     )
     return { ok: true }
   })
+
+  /** Local operator console: everything below belongs to the machine owner. */
+  app.get('/api/admin/containers', async (request, reply) => {
+    await requireAdmin(deps, request, reply)
+    const containers = await deps.store.listContainers()
+    return {
+      containers: containers.map((container) => ({
+        id: container.id,
+        projectId: container.projectId,
+        provider: container.provider,
+        state: container.state,
+        previewPort: container.previewPort,
+        startedAt: container.startedAt,
+        lastActivityAt: container.lastActivityAt,
+      })),
+    }
+  })
+
+  app.post('/api/admin/reap', async (request, reply) => {
+    await requireAdmin(deps, request, reply)
+    const reaper = deps.runtimeProvider as unknown as {
+      reapOrphanContainers?: (isActive: (taskId: string) => Promise<boolean>) => Promise<number>
+    }
+    if (!reaper.reapOrphanContainers) return { removed: 0, note: '当前沙箱提供者不需要回收' }
+    const removed = await reaper.reapOrphanContainers(async (taskId) => {
+      const task = await deps.store.getTask(taskId)
+      return task?.status === 'running' || task?.status === 'queued'
+    })
+    return { removed }
+  })
+
+  app.get('/api/admin/tasks', async (request, reply) => {
+    await requireAdmin(deps, request, reply)
+    const statuses: Array<'queued' | 'running' | 'done' | 'failed'> = ['queued', 'running', 'done', 'failed']
+    const tasks = (await Promise.all(statuses.map((status) => deps.store.listTasksByStatus(status))))
+      .flat()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 50)
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        type: task.type,
+        status: task.status,
+        progress: task.progress,
+        projectId: task.projectId,
+        containerId: task.containerId,
+        createdAt: task.createdAt,
+        finishedAt: task.finishedAt,
+      }))
+    return { tasks }
+  })
 }

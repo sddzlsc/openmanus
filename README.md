@@ -1,13 +1,16 @@
-# OpenManus · 本地优先的通用智能体平台
+# OpenManus
+
+**本地优先的开源通用智能体平台** —— 一句话交代任务，智能体在你自己的机器上异步执行，
+产出文档、表格、幻灯片、PDF、数据图表、网页、图片与视频；编程任务可交付成套工程。
 
 一句话交代任务，智能体在你自己的机器上异步执行，产出**文档、表格、幻灯片、PDF、数据图表、网页、图片、视频**，
 全程可看它干活，完成后可下载、可分享；编程任务还能产出**后台管理系统 + 后端 API + 网站 + 小程序/App** 的成套工程。
 
-编排内核是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh，插件化 harness，MIT）。
-本仓库只提供**产品层、能力包与执行器编排**，不 fork 内核。
+编排内核是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh，插件化 harness，MIT）：
+本项目在它之上提供**产品层、能力包与执行器编排**，不 fork 内核。
+模型与执行器全部走 DeepSeek，一把 API Key 就能跑起来，不需要 OpenAI / Anthropic 账号。
 
-> 本仓库是 Wiwana 团队的参考实现：包命名空间 `@wiwana/*`、示例域名 `wiwana.com` 均为该实现的品牌；
-> 如果你要 fork 成自己的产品，可以整体替换命名空间（见 CONTRIBUTING）。
+> 包命名空间为 `@wiwana/*`（参考实现的品牌名），fork 后可一键替换，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 特性
 
@@ -25,9 +28,20 @@
 | 自动化 | cron 定时任务（含时区）与连接器事件触发 |
 | 常驻环境 | Cloud Computer：项目级常驻容器，工具与后台服务长期保留，任务之间复用 |
 | 并行研究 | Wide Research：按对象数量自动并行派发子智能体，合并去重并保留来源 |
+| 电脑视图 | 任务执行期间自动截取项目预览页并推送到时间线，边做边看 |
+| 管理台 | `/admin`：任务、容器、用量、配额与孤儿容器回收 |
+
+## 演示
+
+![使用流程](docs/assets/teaser.gif)
+
+- 📺 **完整录屏教程（约 1 分钟）**：[`docs/assets/quickstart.mp4`](docs/assets/quickstart.mp4) ——
+  从"交代任务"到"看到时间线与交付物"的真实操作录屏；录屏脚本是 `scripts/record_tour.py`，随时可重录。
+- 🖼 任务台：![任务台](docs/assets/screenshot-home.png)
+- 🧭 任务详情（时间线 + 电脑视图 + 交付物）：![任务详情](docs/assets/screenshot-task.png)
 | 分享 | 公开只读链接，浏览器拦截规则友好（查询参数式路径） |
 
-## 快速开始（本地，免登录）
+## 快速开始
 
 ```sh
 git clone https://github.com/sddzlsc/openmanus.git && cd openmanus
@@ -39,7 +53,7 @@ pnpm dev:control                # http://127.0.0.1:8787
 pnpm dev:web                    # http://127.0.0.1:3000
 ```
 
-本产品**没有账号体系**：单机单用户，打开即用（多用户/计费不在范围内）。
+**没有账号体系、没有计费**：单机单用户，打开即用。
 
 ### 让智能体真的干活
 
@@ -76,7 +90,7 @@ docker network create wiwana-edge
 ```
 
 细节：[docs/architecture.md](docs/architecture.md)｜沙箱镜像与执行器配置：[deploy/sandbox/README.md](deploy/sandbox/README.md)｜
-里程碑：[docs/roadmap.md](docs/roadmap.md)｜阶段三计划：[docs/phase3-plan.md](docs/phase3-plan.md)
+里程碑（M0–M5 全部完成）：[docs/roadmap.md](docs/roadmap.md)｜下一步规划：[docs/phase3-plan.md](docs/phase3-plan.md)
 
 ## 仓库结构
 
@@ -94,7 +108,7 @@ docker network create wiwana-edge
 
 ```sh
 pnpm typecheck        # 全仓类型检查
-pnpm test             # 13 条集成/单元测试（含本地模式、时区 cron、自动化调度）
+pnpm test             # 集成/单元测试（时区 cron、自动化调度、云电脑、交付物导出等）
 node scripts/smoke.mjs
 ```
 

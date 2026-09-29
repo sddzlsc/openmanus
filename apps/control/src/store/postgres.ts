@@ -25,7 +25,33 @@ export class PostgresStore implements Store {
   private sql: postgres.Sql
 
   constructor(databaseUrl: string) {
-    this.sql = postgres(databaseUrl, { max: 10, onnotice: () => {} })
+    this.sql = postgres(databaseUrl, {
+      max: 10,
+      onnotice: () => {},
+      // The shared protocol types every timestamp as an ISO string. postgres-js
+      // would hand back Date objects, which breaks string operations server-side
+      // (sorting, slicing) — so parse to ISO strings at the driver boundary.
+      types: {
+        timestamptz: {
+          to: 1184,
+          from: [1184],
+          serialize: (value: string | Date) => (value instanceof Date ? value.toISOString() : String(value)),
+          parse: (value: string) => new Date(value).toISOString(),
+        },
+        timestamp: {
+          to: 1114,
+          from: [1114],
+          serialize: (value: string | Date) => (value instanceof Date ? value.toISOString() : String(value)),
+          parse: (value: string) => new Date(`${value}Z`).toISOString(),
+        },
+        date: {
+          to: 1082,
+          from: [1082],
+          serialize: (value: string | Date) => (value instanceof Date ? value.toISOString().slice(0, 10) : String(value)),
+          parse: (value: string) => value,
+        },
+      },
+    })
   }
 
   /**
@@ -183,11 +209,17 @@ export class PostgresStore implements Store {
   }
 
   async appendTaskEvent(taskId: string, event: TaskEvent) {
-    const rows = await this.sql<Array<{ seq: number; event: TaskEvent }>>`
-      with next as (select coalesce(max(seq), 0) + 1 as seq from task_events where task_id = ${taskId})
-      insert into task_events (task_id, seq, event)
-      select ${taskId}, next.seq, ${this.sql.json(event as never)} from next
-      returning seq, event`
+    // Several runtime events can land concurrently; a transaction-scoped
+    // advisory lock serializes sequence assignment per task instead of racing on
+    // `max(seq)+1` (which produced duplicate-key failures under load).
+    const rows = await this.sql.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(hashtext(${taskId}))`
+      return tx<Array<{ seq: number; event: TaskEvent }>>`
+        with next as (select coalesce(max(seq), 0) + 1 as seq from task_events where task_id = ${taskId})
+        insert into task_events (task_id, seq, event)
+        select ${taskId}, next.seq, ${tx.json(event as never)} from next
+        returning seq, event`
+    })
     return { ...(rows[0]!.event as TaskEvent), seq: rows[0]!.seq } as TaskEvent
   }
 

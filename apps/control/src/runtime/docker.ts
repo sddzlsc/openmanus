@@ -62,6 +62,8 @@ export class DockerRuntimeProvider implements RuntimeProvider {
         capabilityPacks: input.capabilityPacks,
         limits: input.limits,
       })
+      // Touch the row so the idle sweeper sees real activity, not creation time.
+      await this.options.saveRuntime?.({ ...runtime, lastActivityAt: new Date().toISOString(), state: 'ready' })
       return new DockerRuntimeHandle({
         container: null,
         client,
@@ -261,6 +263,35 @@ export class DockerRuntimeProvider implements RuntimeProvider {
     const container = this.docker.getContainer(existing.externalId)
     await container.stop({ t: 5 }).catch(() => {})
     await container.remove({ force: true }).catch(() => {})
+  }
+
+  /**
+   * Idle sleep for cloud computers: stop the container but keep its row, so the
+   * next task wakes the same project environment. Keeps an always-on box from
+   * holding CPU and memory for projects nobody is using.
+   */
+  async sleepIdleProjectRuntimes(
+    idleMs: number,
+    isProjectBusy: (projectId: string) => Promise<boolean>,
+  ): Promise<number> {
+    const containers = await this.docker.listContainers({
+      all: false,
+      filters: { label: ['wiwana.role=cloud-computer'] },
+    })
+    let slept = 0
+    for (const info of containers) {
+      const projectId = info.Labels?.['wiwana.project']
+      if (!projectId) continue
+      const record = await this.options.findRuntime?.(projectId)
+      if (!record || record.state !== 'ready') continue
+      if (Date.now() - new Date(record.lastActivityAt).getTime() < idleMs) continue
+      if (await isProjectBusy(projectId)) continue
+      const container = this.docker.getContainer(info.Id)
+      await container.stop({ t: 5 }).catch(() => {})
+      await this.options.saveRuntime?.({ ...record, state: 'sleeping', stoppedAt: new Date().toISOString() })
+      slept += 1
+    }
+    return slept
   }
 
   async dispose() {}

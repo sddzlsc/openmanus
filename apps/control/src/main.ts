@@ -95,6 +95,23 @@ async function main(): Promise<void> {
     await sweep()
     setInterval(() => void sweep(), 10 * 60_000).unref?.()
   }
+  const sleeper = runtime as unknown as {
+    sleepIdleProjectRuntimes?: (idleMs: number, isBusy: (projectId: string) => Promise<boolean>) => Promise<number>
+  }
+  if (sleeper.sleepIdleProjectRuntimes) {
+    const idleMs = config.sandbox.idleSleepMs
+    setInterval(() => {
+      void sleeper
+        .sleepIdleProjectRuntimes!(idleMs, async (projectId) => {
+          const running = await store.listTasksByStatus('running')
+          return running.some((task) => task.projectId === projectId)
+        })
+        .then((slept) => {
+          if (slept > 0) console.log(`[control] put ${slept} idle cloud computer(s) to sleep`)
+        })
+        .catch((error) => console.warn('[control] idle sweep failed', error))
+    }, 60_000).unref?.()
+  }
   scheduler.start()
   await app.listen({ port: config.port, host: config.host })
   console.log(`[control] listening on http://${config.host}:${config.port} (store=${config.store}, sandbox=${runtime.kind})`)

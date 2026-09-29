@@ -38,7 +38,7 @@ export function ShareClient({
 
   return (
     <div className="card mx-auto max-w-3xl p-6">
-      <p className="text-xs text-[var(--wiwana-muted)]">Wiwana 智能体交付物</p>
+      <p className="text-xs text-[var(--wiwana-muted)]">OpenManus 交付物</p>
       <h1 className="mt-1 text-xl font-semibold">{artifact.name}</h1>
       <div className="mt-4">
         {(artifact.kind === 'website' || artifact.kind === 'pdf') && artifact.previewUrl ? (
