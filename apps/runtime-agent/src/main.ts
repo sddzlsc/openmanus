@@ -9,6 +9,7 @@ import type { RuntimeDriver } from './drivers/types.js'
 import { startPreviewServer } from './preview.js'
 import { inferMime } from './drivers/artifacts.js'
 import { ScreenWatcher } from './screen.js'
+import { ProjectServices } from './projectServices.js'
 
 async function main(): Promise<void> {
   const config = loadRuntimeConfig()
@@ -150,10 +151,13 @@ async function main(): Promise<void> {
   })
 
   await startPreviewServer(config.workspace, config.previewPort)
+  const projectServices = new ProjectServices({ workspace: config.workspace, apiPort: config.projectApiPort })
+  await projectServices.ensureStarted()
   await app.listen({ port: config.port, host: config.host })
   console.log(`[runtime-agent] listening on http://${config.host}:${config.port}, preview on :${config.previewPort}`)
 
   const shutdown = async () => {
+    await projectServices.stop()
     await app.close()
     process.exit(0)
   }

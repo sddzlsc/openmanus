@@ -93,12 +93,26 @@ export class DshDriver implements RuntimeDriver {
           child.kill('SIGTERM')
         }, this.options.timeoutMs)
 
+        // dsh prints token-by-token; relaying every fragment produced >12k events
+        // for a single project task. Batch into ~400-character chunks flushed at
+        // most every 300 ms so the timeline stays readable and SSE stays cheap.
+        let buffer = ''
+        let flushTimer: NodeJS.Timeout | null = null
+        const flush = () => {
+          if (flushTimer) {
+            clearTimeout(flushTimer)
+            flushTimer = null
+          }
+          const text = buffer.trim()
+          buffer = ''
+          if (text) context.emit({ type: 'terminal', text: `${text}\n` })
+        }
         const relay = (text: string, target: 'stdout' | 'stderr') => {
           if (target === 'stdout') stdout += text
           else stderr += text
-          for (const line of text.split('\n')) {
-            if (line.trim()) context.emit({ type: 'terminal', text: `${line}\n` })
-          }
+          buffer += text
+          if (buffer.length >= 400) flush()
+          else if (!flushTimer) flushTimer = setTimeout(flush, 300)
         }
         child.stdout.on('data', (chunk: Buffer) => relay(chunk.toString(), 'stdout'))
         child.stderr.on('data', (chunk: Buffer) => relay(chunk.toString(), 'stderr'))
@@ -111,6 +125,7 @@ export class DshDriver implements RuntimeDriver {
         child.on('close', (code) => {
           if (settled) return
           settled = true
+          flush()
           clearTimeout(timeout)
           resolve({ code, stdout, stderr, timedOut })
         })
@@ -166,6 +181,17 @@ export class DshDriver implements RuntimeDriver {
 /** Product framing: the headless agent must leave files, not only prose. */
 function buildPrompt(history: string[], type: string): string {
   const [first, ...followUps] = history
+  const suiteHint =
+    type === 'fullstack'
+      ? [
+          '',
+          '这是一个**成套项目**任务，必须交付四端而不是单个页面：',
+          '先运行 `node /opt/wiwana/capabilities/fullstack/scripts/bootstrap.mjs --out /workspace --name "<项目名>" --domain "<业务领域>"` 生成骨架，',
+          '然后按需求改造 site/（网站）、admin/（后台管理）、api/（后端接口，数据落在 api/data/）、app/（uni-app 源码，用于小程序与 App）。',
+          '自检要求：/api/health 返回 200、/admin/ 能增删查数据、/ 首页能读到接口数据；再用 browser 截图 + vision 检查排版。',
+          '交付说明里必须写清：小程序/App 用 HBuilderX 打开 app/ 目录打包（不要在回复里声称已打包成功）。',
+        ]
+      : []
   const researchHint =
     type === 'research'
       ? [
@@ -200,6 +226,7 @@ function buildPrompt(history: string[], type: string): string {
     '',
     `用户任务：${first ?? ''}`,
     ...researchHint,
+    ...suiteHint,
   ]
   if (followUps.length > 0) {
     lines.push('', '后续补充要求（按时间顺序，优先级更高）：')

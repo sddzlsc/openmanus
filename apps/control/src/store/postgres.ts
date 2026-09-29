@@ -94,6 +94,11 @@ export class PostgresStore implements Store {
     await this.sql`update users set role = ${role} where id = ${userId}`
   }
 
+  async deleteUser(userId: string) {
+    // Every child table declares ON DELETE CASCADE, so one statement is enough.
+    await this.sql`delete from users where id = ${userId}`
+  }
+
   async setUserQuota(userId: string, quota: UserQuotaOverride | null) {
     if (!quota) {
       await this.sql`delete from user_quotas where user_id = ${userId}`

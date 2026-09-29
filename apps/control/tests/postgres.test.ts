@@ -13,8 +13,10 @@ const databaseUrl = process.env.DATABASE_URL
 describe.skipIf(!databaseUrl)('postgres store', () => {
   it('round-trips users, projects, tasks, events and artifacts', async () => {
     const store = new PostgresStore(databaseUrl!)
+    let userId: string | null = null
     try {
       const user = await store.createUser({ phone: `199${Date.now().toString().slice(-8)}` })
+      userId = user.id
       expect(user.id).toMatch(/^usr_/)
       expect(await store.getUser(user.id)).toMatchObject({ id: user.id })
 
@@ -87,6 +89,9 @@ describe.skipIf(!databaseUrl)('postgres store', () => {
       await store.setUserQuota(user.id, { dailyTokens: 1000 })
       expect(await store.getUserQuota(user.id)).toMatchObject({ dailyTokens: 1000 })
     } finally {
+      // The suite runs against a real database: clean up after itself, otherwise
+      // leftover "running" tasks occupy the concurrency quota of the dev instance.
+      if (userId) await store.deleteUser(userId).catch(() => {})
       await store.close()
     }
   })

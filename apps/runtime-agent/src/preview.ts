@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
-import { createServer, type Server } from 'node:http'
+import { createServer, request as httpRequest, type Server } from 'node:http'
 import path from 'node:path'
 import { inferMime } from './drivers/artifacts.js'
 
@@ -9,11 +9,47 @@ import { inferMime } from './drivers/artifacts.js'
  * port. In production the edge proxy routes `s-<projectId>.<domain>` here.
  */
 export function startPreviewServer(workspace: string, port: number): Promise<Server> {
+  const apiPort = Number(process.env.PROJECT_API_PORT ?? 8788)
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost')
-    const relative = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)
-    const resolved = path.resolve(workspace, `.${relative}`)
-    if (!resolved.startsWith(path.resolve(workspace))) {
+    let pathname = decodeURIComponent(url.pathname)
+
+    // `/api/*` → the generated project's backend.
+    if (pathname === '/api' || pathname.startsWith('/api/')) {
+      const proxy = httpRequest(
+        { host: '127.0.0.1', port: apiPort, path: url.pathname + url.search, method: request.method, headers: request.headers },
+        (upstream) => {
+          response.writeHead(upstream.statusCode ?? 502, upstream.headers)
+          upstream.pipe(response)
+        },
+      )
+      proxy.on('error', () => {
+        response.writeHead(502, { 'content-type': 'application/json; charset=utf-8' })
+        response.end(JSON.stringify({ error: '项目后端未启动（api/server.mjs）' }))
+      })
+      request.pipe(proxy)
+      return
+    }
+
+    // `/admin/*` → the admin console; everything else → the website (falling
+    // back to the workspace root for single-page projects).
+    let root = workspace
+    if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+      root = path.join(workspace, 'admin')
+      pathname = pathname.replace(/^\/admin/, '') || '/'
+    } else {
+      const siteRoot = path.join(workspace, 'site')
+      try {
+        await stat(siteRoot)
+        root = siteRoot
+      } catch {
+        root = workspace
+      }
+    }
+
+    const relative = pathname === '/' ? '/index.html' : pathname
+    const resolved = path.resolve(root, `.${relative}`)
+    if (!resolved.startsWith(path.resolve(root))) {
       response.writeHead(403).end('forbidden')
       return
     }

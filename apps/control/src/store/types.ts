@@ -34,6 +34,8 @@ export interface Store {
   getUserByWechat(openId: string): Promise<User | null>
   listUsers(): Promise<User[]>
   setUserRole(userId: string, role: User['role']): Promise<void>
+  /** Removes a user and everything that cascades from it (projects, tasks, artifacts). */
+  deleteUser(userId: string): Promise<void>
   setUserQuota(userId: string, quota: UserQuotaOverride | null): Promise<void>
   getUserQuota(userId: string): Promise<UserQuotaOverride | null>
 

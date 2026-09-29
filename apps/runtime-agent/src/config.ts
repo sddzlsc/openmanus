@@ -6,6 +6,8 @@ export interface RuntimeAgentConfig {
   token: string
   workspace: string
   previewPort: number
+  /** Port the generated project's own backend listens on inside the sandbox. */
+  projectApiPort: number
   capabilitiesRoot: string
   dsh: {
     enabled: boolean
@@ -34,6 +36,7 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     token: env.WIWANA_RUNTIME_TOKEN ?? 'dev-runtime-token',
     workspace,
     previewPort: Number(env.WIWANA_PREVIEW_PORT ?? 5173),
+    projectApiPort: Number(env.PROJECT_API_PORT ?? 8788),
     capabilitiesRoot: env.WIWANA_CAPABILITIES_ROOT ?? path.resolve('/opt/wiwana/capabilities'),
     dsh: {
       enabled: env.DSH_ENABLED !== 'false',

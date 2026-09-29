@@ -47,6 +47,12 @@ export function capabilityPacksForTask(taskType: Task['type'], prompt: string): 
     case 'web':
       packs.add('web')
       break
+    case 'fullstack':
+      packs.add('fullstack')
+      packs.add('web')
+      packs.add('data')
+      packs.add('office')
+      break
     case 'media':
       packs.add('media')
       break

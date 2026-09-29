@@ -80,6 +80,7 @@ SSE 支持 `Last-Event-ID` / `?from=` 断线重放；`?once=1` 用于测试与�
 | 交付物中心 + 分享链接 | ✅ `/api/artifacts`、`/s/:slug`、公开文件访问控制 |
 | 配额与防滥用 | ✅ `services/quota.ts`（在沙箱外强制，沙箱内不可绕过） |
 | 办公四件套 / 数据图表 / 网页 | ✅ `packages/capabilities`（本机已验证产出真实 docx/xlsx/pptx/pdf/svg） |
+| 成套项目（网站+管理台+API+小程序/App） | ✅ `fullstack` 能力包 + 多服务预览（`/`、`/admin/`、`/api/*`） |
 | 媒体生成（图/视频/音乐） | ✅ 脚本与接口就绪，需配置厂商 API Key |
 | 电脑视图（截图流） | 🚧 UI 与事件类型就绪，CDP 截图流在 M3 接入 |
 | 浏览器自动化 / 连接器 / 并行研究 / 自动化 / 云电脑 | ⏳ M4–M5，接口与数据模型已预留 |

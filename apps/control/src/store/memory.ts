@@ -64,6 +64,24 @@ export class MemoryStore implements Store {
     if (user) this.users.set(userId, { ...user, role })
   }
 
+  async deleteUser(userId: string) {
+    this.users.delete(userId)
+    this.quotas.delete(userId)
+    for (const [id, project] of this.projects) {
+      if (project.userId === userId) this.projects.delete(id)
+    }
+    for (const [id, task] of this.tasks) {
+      if (task.userId === userId) {
+        this.tasks.delete(id)
+        this.events.delete(id)
+        this.messages.delete(id)
+      }
+    }
+    for (const [id, artifact] of this.artifacts) {
+      if (artifact.userId === userId) this.artifacts.delete(id)
+    }
+  }
+
   async setUserQuota(userId: string, quota: UserQuotaOverride | null) {
     if (quota) this.quotas.set(userId, quota)
     else this.quotas.delete(userId)

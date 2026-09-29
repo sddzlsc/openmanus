@@ -41,6 +41,14 @@ const clientErrorSchema = z.object({
 
 export const TASK_TEMPLATES: TaskTemplate[] = [
   {
+    id: 'full-suite',
+    type: 'fullstack',
+    title: '做一个完整项目',
+    description: '网站 + 后台管理系统 + 后端 API + 小程序/App（uni-app），含独立数据库与多入口预览',
+    examplePrompt:
+      '做一个「社区咖啡店」的完整项目：前台网站展示菜单与门店信息、后台管理系统可以维护菜单与订单、后端提供 API 并保存数据，同时生成可打包成微信小程序和 App 的 uni-app 源码。',
+  },
+  {
     id: 'office-report',
     type: 'office',
     title: '生成一份报告',

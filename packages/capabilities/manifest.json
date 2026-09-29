@@ -58,6 +58,13 @@
       "skills": ["vision"],
       "scripts": ["vision/scripts/describe_image.py"],
       "artifacts": ["doc"]
+    },
+    {
+      "id": "fullstack",
+      "taskTypes": ["fullstack"],
+      "skills": ["fullstack"],
+      "scripts": ["fullstack/scripts/bootstrap.mjs"],
+      "artifacts": ["website", "code", "dataset"]
     }
   ]
 }

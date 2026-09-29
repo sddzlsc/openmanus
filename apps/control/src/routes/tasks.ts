@@ -12,7 +12,7 @@ import type { Artifact, TaskEvent } from '@wiwana/protocol'
 
 const createSchema = z.object({
   projectId: z.string().optional(),
-  type: z.enum(['office', 'data', 'web', 'media', 'research', 'automation']),
+  type: z.enum(['office', 'data', 'web', 'fullstack', 'media', 'research', 'automation']),
   title: z.string().min(1).max(120).optional(),
   prompt: z.string().min(1).max(20000),
   attachmentIds: z.array(z.string()).optional(),

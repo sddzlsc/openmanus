@@ -3,6 +3,7 @@ export type TaskType =
   | 'office' // documents, spreadsheets, slides, pdf
   | 'data' // analysis + charts
   | 'web' // websites / web apps
+  | 'fullstack' // website + admin console + backend API + mini-program/app
   | 'media' // image / video / music generation
   | 'research' // research + browser automation (M4/M5)
   | 'automation' // scheduled / event-triggered (M5)
